@@ -10,15 +10,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
+	memory "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/dynamic"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/kube-openapi/pkg/util/proto"
 )
 
 var (
-	singleton *K8SConfig
+	singleton                 *K8SConfig
+	restClientConfigSingleton *restclient.Config
 )
+
+func SetK8SSingletonClientConfig(config *restclient.Config) {
+	restClientConfigSingleton = config
+}
 
 func K8SConfig_Singleton() *K8SConfig {
 	if singleton == nil {
@@ -28,38 +34,24 @@ func K8SConfig_Singleton() *K8SConfig {
 }
 
 func newK8SConfig() *K8SConfig {
-	//todo: where is kubeconfig
-	kubeconfig := "/kubeconfig"
-	cacheDir := "/dev/shm/kube/http-cache"
-
-	RESTClientGetter := &genericclioptions.ConfigFlags{
-		KubeConfig: &kubeconfig,
-		CacheDir:   &cacheDir,
-	}
-	RESTMapper, err := RESTClientGetter.ToRESTMapper()
-	if err != nil {
-		log.Fatal(err)
-	}
-	RESTConfig, err := RESTClientGetter.ToRESTConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	dynamicClient, err := dynamic.NewForConfig(RESTConfig)
-	if err != nil {
-		log.Fatal(err)
-	}
-	discoveryClient, err := RESTClientGetter.ToDiscoveryClient()
+	dynamicClient, err := dynamic.NewForConfig(restClientConfigSingleton)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	modelsMap := buildModelsMap(discoveryClient)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restClientConfigSingleton)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cachedDiscoveryClient := memory.NewMemCacheClient(discoveryClient)
+
+	modelsMap := buildModelsMap(cachedDiscoveryClient)
 	tfSchemasMap := buildTFSchemasMap(modelsMap)
 
 	return &K8SConfig{
-		RESTMapper:      RESTMapper,
 		DynamicClient:   dynamicClient,
-		DiscoveryClient: discoveryClient,
+		DiscoveryClient: cachedDiscoveryClient,
 		ModelsMap:       modelsMap,
 		TFSchemasMap:    tfSchemasMap,
 	}
