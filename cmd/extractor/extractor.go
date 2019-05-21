@@ -41,19 +41,25 @@ func main() {
 	f.BoolVar(&isImport, "import", false, "automatically import resources")
 	f.Parse(os.Args[1:])
 
+	// TODO(mbarrien): Somehow pass a provider? Refactor to allow different config objects?
+	k8sConfig, err := k8s.NewK8SConfig()
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	if url != "" {
-		extractURL(url, kind, dir)
+		extractURL(k8sConfig, url, kind, dir)
 	} else if filename != "" {
-		extractFile(filename, kind, dir)
+		extractFile(k8sConfig, filename, kind, dir)
 	} else if namespace != "" || kind != "" || name != "" {
-		extractCluster(namespace, kind, name, isImport, dir)
+		extractCluster(k8sConfig, namespace, kind, name, isImport, dir)
 	} else {
 		fmt.Println("Usage: -filename <name of file to extract>")
 		fmt.Println("Usage: -namespace <namespace> -kind <kind> -name <name>, blank means all")
 	}
 
 }
-func extractURL(url string, kind string, dir string) {
+func extractURL(k8sConfig *k8s.K8SConfig, url string, kind string, dir string) {
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Fatal(err)
@@ -61,19 +67,18 @@ func extractURL(url string, kind string, dir string) {
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	//log.Println(string(body))
-	extractYamlBytes(body, kind, dir)
+	extractYamlBytes(k8sConfig, body, kind, dir)
 }
 
-func extractFile(filename string, kind string, dir string) {
+func extractFile(k8sConfig *k8s.K8SConfig, filename string, kind string, dir string) {
 	yamlBytes, yamlErr := ioutil.ReadFile(filename)
 	if yamlErr != nil {
 		log.Fatal(yamlErr)
 	}
-	extractYamlBytes(yamlBytes, kind, dir)
+	extractYamlBytes(k8sConfig, yamlBytes, kind, dir)
 }
 
-func extractYamlBytes(yamlBytes []byte, kindFilter string, dir string) {
-	k8sConfig := k8s.K8SConfig_Singleton()
+func extractYamlBytes(k8sConfig *k8s.K8SConfig, yamlBytes []byte, kindFilter string, dir string) {
 	modelsMap := k8sConfig.ModelsMap
 
 	decoder := yaml.NewYAMLToJSONDecoder(bytes.NewReader(yamlBytes))
@@ -124,12 +129,12 @@ func extractYamlBytes(yamlBytes []byte, kindFilter string, dir string) {
 	}
 }
 
-func extractCluster(namespace, kind, name string, isImport bool, dir string) {
+func extractCluster(k8sConfig *k8s.K8SConfig, namespace, kind, name string, isImport bool, dir string) {
 	systemNamePattern := regexp.MustCompile(`^system:`)
 	var dupDetector = map[string]struct{}{}
 	resourceVerbs := []string{"create", "get"}
 
-	k8s.K8SConfig_Singleton().ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
+	k8sConfig.ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
 		if kind != "" && strings.ToLower(kind) != strings.ToLower(apiResource.Kind) {
 			//log.Println("Skip kind:", gvk.Group, gvk.Version, gvk.Kind)
 			return
@@ -137,7 +142,7 @@ func extractCluster(namespace, kind, name string, isImport bool, dir string) {
 		if len(apiResource.Verbs) > 0 && !sets.NewString(apiResource.Verbs...).HasAll(resourceVerbs...) {
 			return
 		}
-		model := k8s.K8SConfig_Singleton().ModelsMap[gvk]
+		model := k8sConfig.ModelsMap[gvk]
 		if model == nil {
 			//log.Println("No Model For:", gvk)
 			return
@@ -158,10 +163,10 @@ func extractCluster(namespace, kind, name string, isImport bool, dir string) {
 			return
 		}
 
-		RESTMapping, _ := k8s.K8SConfig_Singleton().RESTMapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
+		RESTMapping, _ := k8sConfig.RESTMapper.RESTMapping(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}, gvk.Version)
 		//todo: get namespace from command line
 		var resourceClient dynamic.ResourceInterface
-		resourceClient = k8s.K8SConfig_Singleton().DynamicClient.Resource(RESTMapping.Resource)
+		resourceClient = k8sConfig.DynamicClient.Resource(RESTMapping.Resource)
 		if apiResource.Namespaced {
 			resourceClient = resourceClient.(dynamic.NamespaceableResourceInterface).Namespace(namespace)
 		}

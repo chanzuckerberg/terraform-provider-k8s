@@ -29,24 +29,30 @@ func main() {
 	f.Parse(os.Args[1:])
 	args := f.Args()
 
+	// TODO(mbarrien): Somehow pass a provider? Refactor to allow different config objects?
+	k8sConfig, err := k8s.NewK8SConfig()
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	if site {
-		generateSite()
+		generateSite(k8sConfig)
 	} else if len(args) > 0 {
 		resourceKey := args[0]
-		resourcesMap := k8s.BuildResourcesMap()
+		resourcesMap := k8s.BuildResourcesMap(k8sConfig)
 		resource := resourcesMap[resourceKey]
-		schema := k8s.K8SConfig_Singleton().TFSchemasMap[resourceKey]
+		schema := k8sConfig.TFSchemasMap[resourceKey]
 		generateResource(resourceKey, resource, schema, count, lifecycle, dynamic, doc, os.Stdout)
 	} else {
-		listResources()
+		listResources(k8sConfig)
 	}
 }
 
-func generateSite() {
+func generateSite(k8sConfig *k8s.K8SConfig) {
 	var baseDir = "./site"
 	CreateDirIfNotExist(baseDir)
 
-	resourcesMap := k8s.BuildResourcesMap()
+	resourcesMap := k8s.BuildResourcesMap(k8sConfig)
 	keys := make([]string, 0, len(resourcesMap))
 	for k := range resourcesMap {
 		keys = append(keys, k)
@@ -54,7 +60,7 @@ func generateSite() {
 	sort.Strings(keys)
 	for _, resourceKey := range keys {
 		resource := resourcesMap[resourceKey]
-		schema := k8s.K8SConfig_Singleton().TFSchemasMap[resourceKey]
+		schema := k8sConfig.TFSchemasMap[resourceKey]
 
 		dir := baseDir + "/" + resourceKey
 		if k8s.IsDeprecated(schema) {
@@ -79,8 +85,8 @@ func CreateDirIfNotExist(dir string) {
 	}
 }
 
-func listResources() {
-	resourcesMap := k8s.BuildResourcesMap()
+func listResources(k8sConfig *k8s.K8SConfig) {
+	resourcesMap := k8s.BuildResourcesMap(k8sConfig)
 	keys := make([]string, 0, len(resourcesMap))
 	for k := range resourcesMap {
 		keys = append(keys, k)
@@ -91,7 +97,7 @@ func listResources() {
 		fmt.Println("resource \"" + resourceKey + "\"")
 	}
 
-	dataSourcesMap := k8s.BuildDataSourcesMap()
+	dataSourcesMap := k8s.BuildDataSourcesMap(k8sConfig)
 	keys = make([]string, 0, len(dataSourcesMap))
 	for k := range dataSourcesMap {
 		keys = append(keys, k)

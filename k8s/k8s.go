@@ -20,16 +20,16 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-func BuildResourcesMap() map[string]*tfSchema.Resource {
+func BuildResourcesMap(k8sConfig *K8SConfig) map[string]*tfSchema.Resource {
 	resourcesMap := map[string]*tfSchema.Resource{}
 	resourceVerbs := []string{"create", "get"}
 
-	K8SConfig_Singleton().ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
+	k8sConfig.ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
 		if len(apiResource.Verbs) > 0 && !sets.NewString(apiResource.Verbs...).HasAll(resourceVerbs...) {
 			return
 		}
 
-		model := K8SConfig_Singleton().ModelsMap[gvk]
+		model := k8sConfig.ModelsMap[gvk]
 		if model == nil {
 			//log.Println("no model for:", apiResource, gvk)
 			//skip resources without a model
@@ -44,7 +44,7 @@ func BuildResourcesMap() map[string]*tfSchema.Resource {
 			return
 		}
 
-		resourceSchema := K8SConfig_Singleton().TFSchemasMap[resourceKey]
+		resourceSchema := k8sConfig.TFSchemasMap[resourceKey]
 		if resourceSchema == nil {
 			log.Fatalln("Schema not found for:" + resourceKey)
 		}
@@ -101,16 +101,16 @@ func BuildResourcesMap() map[string]*tfSchema.Resource {
 	return resourcesMap
 }
 
-func BuildDataSourcesMap() map[string]*tfSchema.Resource {
+func BuildDataSourcesMap(k8sConfig *K8SConfig) map[string]*tfSchema.Resource {
 	resourcesMap := map[string]*tfSchema.Resource{}
 	resourceVerbs := []string{"get"}
 
-	K8SConfig_Singleton().ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
+	k8sConfig.ForEachAPIResource(func(apiResource metav1.APIResource, gvk schema.GroupVersionKind) {
 		if len(apiResource.Verbs) > 0 && !sets.NewString(apiResource.Verbs...).HasAll(resourceVerbs...) {
 			return
 		}
 
-		model := K8SConfig_Singleton().ModelsMap[gvk]
+		model := k8sConfig.ModelsMap[gvk]
 		if model == nil {
 			//log.Println("no model for:", apiResource, gvk)
 			//skip resources without a model
@@ -125,7 +125,7 @@ func BuildDataSourcesMap() map[string]*tfSchema.Resource {
 			return
 		}
 
-		resourceSchema := K8SConfig_Singleton().TFSchemasMap[resourceKey]
+		resourceSchema := k8sConfig.TFSchemasMap[resourceKey]
 		if resourceSchema == nil {
 			log.Fatalln("Schema not found for:" + resourceKey)
 		}
@@ -144,12 +144,11 @@ func BuildDataSourcesMap() map[string]*tfSchema.Resource {
 }
 
 func datasourceRead(resourceKey string, gvk *schema.GroupVersionKind, isNamespaced bool, model proto.Schema, resourceData *tfSchema.ResourceData, meta interface{}) error {
-	k8sConfig := meta.(*K8SConfig)
 	name, nameErr := getName(resourceData)
 	if nameErr != nil {
 		return nameErr
 	}
-	namespace := getNamespace(isNamespaced, resourceData, k8sConfig)
+	namespace := getNamespace(isNamespaced, resourceData)
 	resourceData.SetId(CreateId(namespace, gvk.Kind, name))
 
 	return resourceRead(resourceKey, gvk, isNamespaced, model, resourceData, meta)
@@ -180,7 +179,7 @@ func resourceCreate(resourceKey string, gvk *schema.GroupVersionKind, isNamespac
 	if nameErr != nil {
 		return nameErr
 	}
-	namespace := getNamespace(isNamespaced, resourceData, k8sConfig)
+	namespace := getNamespace(isNamespaced, resourceData)
 
 	visitor := NewTF2K8SVisitor(resourceData, "", "", resourceData)
 	model.Accept(visitor)
@@ -314,14 +313,9 @@ func getName(resourceData *tfSchema.ResourceData) (string, error) {
 	}
 }
 
-func getNamespace(isNamespaced bool, resourceData *tfSchema.ResourceData, k8sConfig *K8SConfig) string {
+func getNamespace(isNamespaced bool, resourceData *tfSchema.ResourceData) string {
 	if !isNamespaced {
 		return ""
 	}
-	namespace := resourceData.Get("metadata.0.namespace").(string)
-	if namespace != "" {
-		return namespace
-	} else {
-		return k8sConfig.Namespace
-	}
+	return resourceData.Get("metadata.0.namespace").(string)
 }
