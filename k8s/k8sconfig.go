@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
 	diskcached "k8s.io/client-go/discovery/cached/disk"
 	"k8s.io/client-go/dynamic"
@@ -31,11 +32,11 @@ import (
 	"k8s.io/kube-openapi/pkg/util/proto"
 )
 
-// NewK8SConfig gets a K8SConfig object configured from the given settings
+// NewK8SConfigFromTFSchema gets a K8SConfig object configured from the given Terraform settings
 // Functionality extracted from a combination of terraform-provider-kubernetes/kubernetes/provider.go
 // and k8s.io/cli-runtime/pkg/genericclioptions/config_flags.go to be able to pass in our own
 // restclient.Config
-func NewK8SConfig(d *tfSchema.ResourceData) (*K8SConfig, error) {
+func NewK8SConfigFromTFSchema(d *tfSchema.ResourceData) (*K8SConfig, error) {
 	var cfg *restclient.Config
 	var err error
 	if d.Get("load_config_file").(bool) {
@@ -93,6 +94,32 @@ func NewK8SConfig(d *tfSchema.ResourceData) (*K8SConfig, error) {
 		cfg.ExecProvider = exec
 	}
 
+	return newK8SConfig(cfg)
+}
+
+// NewK8SConfigFromKubeconfig gets a K8SConfig object configured from a Kubeconfig
+func NewK8SConfigFromKubeconfig(kubeConfig string, cacheDir string) (*K8SConfig, error) {
+	//todo: where is kubeconfig
+	defaultKubeConfig := "/kubeconfig"
+	if kubeConfig == "" {
+		kubeConfig = defaultKubeConfig
+	}
+	defaultCacheDir := "/dev/shm/kube/http-cache"
+	if cacheDir == "" {
+		cacheDir = defaultCacheDir
+	}
+	RESTClientGetter := &genericclioptions.ConfigFlags{
+		KubeConfig: &kubeConfig,
+		CacheDir:   &cacheDir,
+	}
+	RESTConfig, err := RESTClientGetter.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	return newK8SConfig(RESTConfig)
+}
+
+func newK8SConfig(cfg *restclient.Config) (*K8SConfig, error) {
 	dynamicClient, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		log.Fatal(err)

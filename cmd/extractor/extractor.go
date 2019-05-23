@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	var filename, namespace, kind, name, dir, url string
+	var filename, namespace, kind, name, dir, url, kubeconfig, cacheDir string
 	var isImport bool
 
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -38,11 +38,13 @@ func main() {
 	f.StringVar(&namespace, "ns", "default", "namespace of resources to extract")
 	f.StringVar(&kind, "kind", "", "kind of resources to extract")
 	f.StringVar(&name, "name", "", "name of resources to extract")
+	f.StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
+	f.StringVar(&kubeconfig, "k", "", "path to kubeconfig file")
+	f.StringVar(&cacheDir, "cachedir", "", "path to kubernetes cache directory")
 	f.BoolVar(&isImport, "import", false, "automatically import resources")
 	f.Parse(os.Args[1:])
 
-	// TODO(mbarrien): Somehow pass a provider? Refactor to allow different config objects?
-	k8sConfig, err := k8s.NewK8SConfig()
+	k8sConfig, err := k8s.NewK8SConfigFromKubeconfig(kubeconfig, cacheDir)
 	if err != nil {
 		log.Println(err)
 		return

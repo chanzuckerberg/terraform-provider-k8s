@@ -125,7 +125,7 @@ func Provider() *schema.Provider {
 
 func providerConfigure(provider *schema.Provider) schema.ConfigureFunc {
 	return func(resourceData *schema.ResourceData) (interface{}, error) {
-		k8sConfig, err := NewK8SConfig(resourceData)
+		k8sConfig, err := NewK8SConfigFromTFSchema(resourceData)
 		if err != nil {
 			return k8sConfig, err
 		}

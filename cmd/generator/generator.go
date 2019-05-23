@@ -18,19 +18,21 @@ import (
 )
 
 func main() {
-	var count, lifecycle string
+	var count, lifecycle, kubeconfig, cacheDir string
 	var doc, dynamic, site bool
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	f.StringVar(&count, "count", "", "count expression")
 	f.StringVar(&lifecycle, "lifecycle", "", "lifecycle expression")
+	f.StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file")
+	f.StringVar(&kubeconfig, "k", "", "path to kubeconfig file")
+	f.StringVar(&cacheDir, "cachedir", "", "path to kubernetes cache directory")
 	f.BoolVar(&dynamic, "dynamic", false, "generate dynamic blocks; defaults to standard blocks")
 	f.BoolVar(&doc, "doc", false, "generate markdown documentation")
 	f.BoolVar(&site, "site", false, "generate entire documentation site")
 	f.Parse(os.Args[1:])
 	args := f.Args()
 
-	// TODO(mbarrien): Somehow pass a provider? Refactor to allow different config objects?
-	k8sConfig, err := k8s.NewK8SConfig()
+	k8sConfig, err := k8s.NewK8SConfigFromKubeconfig(kubeconfig, cacheDir)
 	if err != nil {
 		log.Println(err)
 		return

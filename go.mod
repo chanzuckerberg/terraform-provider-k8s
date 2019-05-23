@@ -3,6 +3,7 @@ module github.com/mingfang/terraform-provider-k8s
 go 1.12
 
 require (
+	github.com/awalterschulze/gographviz v0.0.0-20190522210029-fa59802746ab
 	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/go-restful v2.9.5+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
